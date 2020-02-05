@@ -11,7 +11,7 @@ const (
 	OrderStatusOpen
 	OrderStatusPartial
 	OrderStatusFilled
-	OrderStatusCancelled
+	OrderStatusCanceled
 )
 
 // Order represents an order on the book. Orders are either buy or sell.
@@ -43,16 +43,19 @@ func (pricePoint *PricePoint) Insert(order *Order) {
 	}
 }
 
-// OrderBook keeps track of the current maximum bid and minimum ask, the orders, and possible price points.
+// OrderBook keeps track of the current maximum bid and minimum ask,
+// the orders, and possible price points.
 type OrderBook struct {
 	ask        uint32
 	bid        uint32
 	orderIndex map[uint64]*Order
 	prices     [maxPrice]*PricePoint
+	actions    chan<- *Action
 }
 
 // OpenOrder inserts a new order into the book.
-// It appends the order to the list of orders at its price point, updates the bid or ask, and adds an entry in the order index.
+// It appends the order to the list of orders at its price point,
+// updates the bid or ask, and adds an entry in the order index.
 func (orderBook *OrderBook) OpenOrder(order *Order) {
 	pricePoint := orderBook.prices[order.price]
 	pricePoint.Insert(order)
@@ -68,4 +71,15 @@ func (orderBook *OrderBook) OpenOrder(order *Order) {
 	}
 
 	orderBook.orderIndex[order.id] = order
+}
+
+// CancelOrder cancels an order by setting its amount to 0 and
+// status to OrderStatusCanceled.
+func (orderBook *OrderBook) CancelOrder(id uint64) {
+	if order, ok := orderBook.orderIndex[id]; ok {
+		order.amount = 0
+		order.status = OrderStatusCanceled
+	}
+
+	orderBook.actions <- NewCanceledAction(id)
 }
