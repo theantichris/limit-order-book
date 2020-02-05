@@ -5,13 +5,9 @@ type ActionType string
 
 // The valid types of actions.
 const (
-	ActionTypeBuy           = "BUY"
-	ActionTypeSell          = "SELL"
-	ActionTypeCancel        = "CANCEL"
 	ActionTypeCanceled      = "CANCELED"
 	ActionTypePartialFilled = "PARTIAL_FILLED"
 	ActionTypeFilled        = "FILLED"
-	ActionTypeDone          = "DONE"
 )
 
 // Action represents an operation on the order book.

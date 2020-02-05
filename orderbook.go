@@ -17,18 +17,18 @@ const (
 // Order represents an order on the book. Orders are either buy or sell.
 // Each order is linted to the next order at the same price point.
 type Order struct {
-	id     uint64
-	isBuy  bool        // true for buy, false for sell
-	price  uint32      // the price per unit to buy or sell at
-	amount uint32      // the amount the user wants to buy for the price
-	status OrderStatus // status of the order
-	next   *Order      // the next order on the book
+	id        uint64
+	isBuy     bool        // true for buy, false for sell
+	price     uint32      // the price per unit to buy or sell at
+	amount    uint32      // the amount the user wants to buy for the price
+	status    OrderStatus // status of the order
+	nextOrder *Order      // the next order on the book
 }
 
 // OrderBook keeps track of the order book.
 type OrderBook struct {
-	ask        uint32                // minimum ask
-	bid        uint32                // maximum bid
+	ask        uint32                // minimum ask (maximum buy price)
+	bid        uint32                // maximum bid (minimum sell price)
 	orderIndex map[uint64]*Order     // list of orders on the book
 	prices     [maxPrice]*PricePoint // list of price points
 	actions    chan<- *Action        // channel for order book operations
@@ -54,8 +54,7 @@ func (orderBook *OrderBook) OpenOrder(order *Order) {
 	orderBook.orderIndex[order.id] = order
 }
 
-// CancelOrder cancels an order by setting its amount to 0 and
-// status to OrderStatusCanceled.
+// CancelOrder cancels an order by setting its amount to 0.
 func (orderBook *OrderBook) CancelOrder(id uint64) {
 	if order, ok := orderBook.orderIndex[id]; ok {
 		order.amount = 0
@@ -70,18 +69,41 @@ func (orderBook *OrderBook) CancelOrder(id uint64) {
 // it fills the order or exhausts the open orders at the price point.
 // It then moves down to the next price point and repeats.
 func (orderBook *OrderBook) FillSell(order *Order) {
+	// while the order isn't fully filled and the bid is at least the order price
 	for orderBook.bid >= order.price && order.amount > 0 {
-		pricePoint := orderBook.prices[orderBook.bid]
-		orderHead := pricePoint.orderHead
+		pricePoint := orderBook.prices[orderBook.bid] // get the price point for the bid amount
+		orderHead := pricePoint.orderHead             // get first order on the book
 
 		for orderHead != nil {
 			orderBook.fillOrder(order, orderHead)
-			orderHead = orderHead.next
+
+			orderHead = orderHead.nextOrder // get next order on the book
 			pricePoint.orderHead = orderHead
 		}
 
-		orderBook.bid--
+		orderBook.bid-- //
 	}
+}
+
+// FillBuy fills a buy order.
+// Starts at the maximum ask and iterates over all open orders until
+// it fills the order or exhausts the open orders at the price point.
+// It then moves up to the next price point and repeats.
+func (orderBook *OrderBook) FillBuy(order *Order) {
+	// while the order isn't filled and the ask is less than the order price
+	for orderBook.ask < order.price && order.amount > 0 {
+		pricePoint := orderBook.prices[orderBook.ask] // get the price point for the ask amount
+		orderHead := pricePoint.orderHead             // get the first order on the book
+
+		for orderHead != nil {
+			orderBook.fillOrder(order, orderHead)
+
+			orderHead = orderHead.nextOrder // get next order on the book
+			pricePoint.orderHead = orderHead
+		}
+	}
+
+	orderBook.ask++
 }
 
 func (orderBook *OrderBook) fillOrder(order, orderHead *Order) {

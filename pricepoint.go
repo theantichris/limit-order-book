@@ -13,7 +13,7 @@ func (pricePoint *PricePoint) Insert(order *Order) {
 		pricePoint.orderHead = order
 		pricePoint.orderTail = order
 	} else {
-		pricePoint.orderTail.next = order
+		pricePoint.orderTail.nextOrder = order
 		pricePoint.orderTail = order
 	}
 }
