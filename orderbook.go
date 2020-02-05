@@ -18,21 +18,20 @@ const (
 // Each order is linted to the next order at the same price point.
 type Order struct {
 	id     uint64
-	isBuy  bool
-	price  uint32
-	amount uint32
-	status OrderStatus
-	next   *Order
+	isBuy  bool        // true for buy, false for sell
+	price  uint32      // the price per unit to buy or sell at
+	amount uint32      // the amount the user wants to buy for the price
+	status OrderStatus // status of the order
+	next   *Order      // the next order on the book
 }
 
-// OrderBook keeps track of the current maximum bid and minimum ask,
-// the orders, and possible price points.
+// OrderBook keeps track of the order book.
 type OrderBook struct {
-	ask        uint32
-	bid        uint32
-	orderIndex map[uint64]*Order
-	prices     [maxPrice]*PricePoint
-	actions    chan<- *Action
+	ask        uint32                // minimum ask
+	bid        uint32                // maximum bid
+	orderIndex map[uint64]*Order     // list of orders on the book
+	prices     [maxPrice]*PricePoint // list of price points
+	actions    chan<- *Action        // channel for order book operations
 }
 
 // OpenOrder inserts a new order into the book.
@@ -64,4 +63,44 @@ func (orderBook *OrderBook) CancelOrder(id uint64) {
 	}
 
 	orderBook.actions <- NewCanceledAction(id)
+}
+
+// FillSell fills a sell order.
+// Starts at the maximum bid and iterates over all open orders until
+// it fills the order or exhausts the open orders at the price point.
+// It then moves down to the next price point and repeats.
+func (orderBook *OrderBook) FillSell(order *Order) {
+	for orderBook.bid >= order.price && order.amount > 0 {
+		pricePoint := orderBook.prices[orderBook.bid]
+		orderHead := pricePoint.orderHead
+
+		for orderHead != nil {
+			orderBook.fillOrder(order, orderHead)
+			orderHead = orderHead.next
+			pricePoint.orderHead = orderHead
+		}
+
+		orderBook.bid--
+	}
+}
+
+func (orderBook *OrderBook) fillOrder(order, orderHead *Order) {
+	if orderHead.amount >= order.amount {
+		orderBook.actions <- NewFilledAction(order, orderHead)
+		orderHead.amount -= order.amount
+
+		order.amount = 0
+		order.status = OrderStatusFilled
+
+		return
+	}
+
+	if orderHead.amount > 0 {
+		orderBook.actions <- NewPartialFilledAction(order, orderHead)
+
+		order.amount -= orderHead.amount
+		order.status = OrderStatusPartial
+
+		orderHead.amount = 0
+	}
 }
